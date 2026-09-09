@@ -60,11 +60,37 @@ npm run build    # tsc -b && vite build
 
 ## Git Conventions
 
-- Default branch: `main`
-- GitHub is the machine-to-machine handoff boundary for published work
-- Use feature/fix branches and pull requests into `main`
+Canonical workflow:
+
+```text
+Implement → checkpoint → push → PR → CI → independent review → merge → main
+```
+
+- Default branch: `main` — integrated, reviewable, CI-verified project state
+- GitHub is the durable collaboration/integration boundary; Cursor and Cursor Worker are implementation environments
+- Branch model: `feature/<desc>`, `fix/<desc>`, `chore/<desc>`, `wip/<desc>`
+- Feature/fix/chore are for changes intended to reach `main`; `wip/` is for durable incomplete checkpoints
+- Prefer pull requests for integration; do not push directly to `main`
 - Do not force-push or rewrite shared history by default
-- Do not push directly to `main` when branch protection is enabled
+- Never use `git reset --hard`, `git clean -fd`, or force-push without explicit authorization
+- Never commit secrets, `.env` files, or personal PDF samples
+- Preserve dirty WIP that is not yours; do not assume a dirty tree belongs to this session
+
+CI: GitHub Actions `.github/workflows/ci.yml` — jobs `backend` (`pytest`) and `frontend` (`npm ci`, `npm run lint`, `npm run build`). Do not disable failing checks to make CI green.
+
+PRs should include: What changed, Why, Validation, Risk / impact, Known limitations. A template lives at `.github/PULL_REQUEST_TEMPLATE.md`.
+
+### Independent review
+
+Grok (and/or another independent reviewer) is a review layer **after CI**, not a substitute for it. Prefer it for infrastructure, security, data, migrations, and other high-impact changes. Trivial documentation changes may use reduced review depth. Humans remain the merge authority. There is no automated Grok merge gate in this repository.
+
+### Worker reporting
+
+Worker checkout: `/data/projects/worker/JaarrekeningAnalyzer`. Interactive checkout: `/data/projects/active/JaarrekeningAnalyzer`. Do not modify the other tree.
+
+When Worker (or an agent) completes a change, report: repository, branch, commit SHA, files changed, checks run, CI status when known, remaining issues.
+
+Worker must not destroy pre-existing WIP, force-push, bypass CI, silently merge important changes, commit secrets, or assume all dirty files belong to Worker.
 
 ## Important Constraints
 
