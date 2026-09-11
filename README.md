@@ -4,6 +4,13 @@ De Jaarrekening Analyzer is een lokale webapplicatie waarmee je een Belgische ja
 
 Het resultaat toon je in een overzichtelijke interface: de geëxtraheerde balans (activa en passiva), de resultatenrekening, en de berekende ratio's met formule en ontbrekende codes waar data ontbreekt. Alles draait lokaal op je eigen machine; er is geen database en geen cloud-upload.
 
+
+## Production Docker deployment
+
+See [`DEPLOY.md`](DEPLOY.md) for the Compose-based production layout (Caddy +
+FastAPI + `ratios-data` volume), exact-commit checkout, secrets handling, and
+health checks. That document does not auto-deploy any host.
+
 ## Vereisten
 
 - Python 3.11+
