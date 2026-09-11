@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import time
 from collections import defaultdict, deque
 from typing import Callable
@@ -26,6 +27,19 @@ LIMITED_PATHS = frozenset(
 LIMITED_PREFIXES = ("/api/ratios/history/", "/api/tables/history/")
 
 
+def _valid_ip(value: str | None) -> str | None:
+    if not value:
+        return None
+    candidate = value.strip()
+    if not candidate:
+        return None
+    try:
+        ipaddress.ip_address(candidate)
+    except ValueError:
+        return None
+    return candidate
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Limit POST requests per client IP on selected API paths."""
 
@@ -45,10 +59,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._hits: dict[str, deque[float]] = defaultdict(deque)
 
     def _client_ip(self, request: Request) -> str:
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            # First hop is the original client (Cloudflare / Caddy).
-            return forwarded.split(",")[0].strip() or "unknown"
+        # Prefer Cloudflare's connecting IP when traffic arrived via CF edge.
+        # Do NOT trust client-supplied X-Forwarded-For (spoofable).
+        cf_ip = _valid_ip(request.headers.get("cf-connecting-ip"))
+        if cf_ip:
+            return cf_ip
+        # Optional X-Real-IP only when set by our Caddy to CF-Connecting-IP.
+        real_ip = _valid_ip(request.headers.get("x-real-ip"))
+        if real_ip:
+            return real_ip
         if request.client and request.client.host:
             return request.client.host
         return "unknown"

@@ -1,0 +1,16 @@
+.git
+.githooks
+.cursor
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.venv
+**/venv
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+backend/tests
+*.md
+!DEPLOY.md
