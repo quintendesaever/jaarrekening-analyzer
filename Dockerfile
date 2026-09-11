@@ -18,8 +18,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/app ./app
 COPY backend/config ./config
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app \
+    && mkdir -p /data \
+    && chown -R app:app /app /data \
+    && chmod 755 /docker-entrypoint.sh
 
 EXPOSE 8000
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # --- Reverse proxy + static SPA ---

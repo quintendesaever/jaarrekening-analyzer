@@ -2,14 +2,15 @@
 
 De Jaarrekening Analyzer is een lokale webapplicatie waarmee je een Belgische jaarrekening-PDF kunt uploaden en automatisch financiële inzichten krijgt. De app leest tekst-PDF's in NBB-stijl (zoals gedeponeerd bij de Nationale Bank van België), haalt daar de MAR-codes en bedragen uit, en berekent daarop financiële ratio's. Denk aan liquiditeit, solvabiliteit en rentabiliteit.
 
-Het resultaat toon je in een overzichtelijke interface: de geëxtraheerde balans (activa en passiva), de resultatenrekening, en de berekende ratio's met formule en ontbrekende codes waar data ontbreekt. Alles draait lokaal op je eigen machine; er is geen database en geen cloud-upload.
-
+Het resultaat toon je in een overzichtelijke interface: de geëxtraheerde balans (activa en passiva), de resultatenrekening, en de berekende ratio's met formule en ontbrekende codes waar data ontbreekt. Standaard draait alles lokaal op je eigen machine; er is geen database en geen cloud-upload.
 
 ## Production Docker deployment
 
-See [`DEPLOY.md`](DEPLOY.md) for the Compose-based production layout (Caddy +
-FastAPI + `ratios-data` volume), exact-commit checkout, secrets handling, and
-health checks. That document does not auto-deploy any host.
+See [`DEPLOY.md`](DEPLOY.md) for the Compose layout (Caddy + FastAPI +
+`ratios-data`). Default `docker compose up -d` is **local-only** (loopback
+Caddy). A Cloudflare Quick Tunnel is an **explicit opt-in** (`--profile tunnel`)
+for demo/ProBook parity and is not authentication. That document does not
+auto-deploy any host.
 
 ## Vereisten
 

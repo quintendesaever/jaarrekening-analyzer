@@ -5,29 +5,55 @@ Production branch: `main`
 Deployment unit: **exact Git commit SHA**
 
 This document describes how to build and run the application from a single
-checked-out commit using Docker Compose. It mirrors the architecture that has
-been running on the home ProBook host. It does **not** itself deploy to that
-host.
+checked-out commit using Docker Compose. It does **not** itself deploy any host.
 
 ## Architecture
 
+### Default (local-only)
+
 ```text
-Internet
+Host loopback only
   ↓
-Cloudflare Quick Tunnel (cloudflared, outbound-only)
-  ↓
-Caddy (:80)
+127.0.0.1:80 → Caddy
   ├── /           → static Vite SPA
   └── /api/*      → FastAPI (uvicorn) on app:8000
         ↓
 Docker volume `ratios-data` → /data (ratios.yaml, tables.yaml, history)
 ```
 
-| Service | Role |
-|---------|------|
-| `app` | FastAPI / pdfplumber analysis (internal `:8000`) |
-| `caddy` | Static SPA + `/api` reverse proxy; host publishes `:80` |
-| `cloudflared` | Quick Tunnel → `http://caddy:80` (URL rotates on restart) |
+`docker compose up -d` starts **`app` + `caddy` only**. Nothing is published on the
+LAN, and **no Cloudflare tunnel is started**.
+
+### Optional Quick Tunnel profile
+
+```text
+Internet
+  ↓
+Cloudflare Quick Tunnel (*.trycloudflare.com)  ← opt-in profile `tunnel`
+  ↓
+Docker network → caddy:80
+  ↓
+app:8000
+```
+
+Quick Tunnel is **not** authentication, access control, or a security boundary.
+Anyone who learns the rotating URL can reach unauthenticated analyze endpoints
+(subject only to in-memory rate limits). Prefer a future named/authenticated
+Cloudflare tunnel or other access control for anything beyond a short demo.
+
+Pinned tunnel image (deliberate upgrades only):
+
+```text
+cloudflare/cloudflared:2026.9.0@sha256:ff69a2225ad7c6f85ed84fbd5f3087df46202426b2388ec60214098e0adf05e9
+```
+
+Changing this pin is a deployment-definition change and should be reviewed.
+
+| Service | Role | Default? |
+|---------|------|----------|
+| `app` | FastAPI / pdfplumber (internal `:8000`, non-root) | yes |
+| `caddy` | SPA + `/api` proxy; host bind `127.0.0.1:80` | yes |
+| `cloudflared` | Quick Tunnel → `http://caddy:80` | **profile `tunnel` only** |
 
 PDF upload body limit: **20 MB** (Caddy `request_body` + backend checks).
 
@@ -46,14 +72,7 @@ ADMIN_TOKEN=<random-secret>
 | `ADMIN_TOKEN` | For config writes | Header `X-Admin-Token` for live ratio/table edits |
 | `CORS_ORIGINS` | No | Defaults cover Vite; production SPA is same-origin via Caddy |
 
-Do **not** commit:
-
-- `.env`
-- Cloudflare tunnel tokens / credentials
-- contents of the `ratios-data` volume
-
-Cloudflare Quick Tunnel here uses `cloudflared tunnel --url` (no token file in
-this repo). A future named tunnel would keep credentials **outside** Git.
+Do **not** commit `.env`, Cloudflare credentials/tokens, or `ratios-data` contents.
 
 ## Persistent data (`ratios-data`)
 
@@ -73,8 +92,8 @@ docker compose up -d --build
 # docker compose down -v
 ```
 
-Live edits in the UI (**Ratio-configuratie** / **Tabellen configuratie** →
-**Opslaan**) update the volume only; they do not require a Git change.
+The backend entrypoint adjusts `/data` ownership for the non-root app user
+(`uid/gid 10001`) when the container starts as root, then drops privileges.
 
 ## Deploy an exact commit (manual procedure)
 
@@ -90,51 +109,69 @@ cp .env.example .env
 # edit .env — set ADMIN_TOKEN
 
 docker compose build
+```
+
+### Local / default (no public tunnel)
+
+```bash
 docker compose up -d
+```
+
+### ProBook / Quick Tunnel parity (explicit opt-in)
+
+```bash
+docker compose --profile tunnel up -d
 ```
 
 ### Health verification
 
 ```bash
-# Backend via Caddy (preferred on the host)
+# Backend via Caddy on host loopback
 curl -s http://127.0.0.1/api/health
 # expect: {"status":"ok"}
 
-# Containers
 docker compose ps
 ```
 
-A future deployment agent should treat success as:
+Success criteria for a future agent:
 
-1. `docker compose ps` shows `app`, `caddy`, and `cloudflared` running
-2. `GET /api/health` returns HTTP 200 with `{"status":"ok"}`
-3. Recorded deployment metadata includes repository + commit SHA
+1. `app` is healthy; `caddy` is running
+2. `GET http://127.0.0.1/api/health` → HTTP 200 `{"status":"ok"}`
+3. With profile `tunnel`, `cloudflared` is running; without it, `cloudflared` is absent
+4. Deployment metadata records repository + commit SHA
 
-### Public URL (Quick Tunnel)
+### Public URL (only with `--profile tunnel`)
 
 ```bash
-docker compose logs -f cloudflared
+docker compose --profile tunnel logs -f cloudflared
 ```
 
-Look for `https://….trycloudflare.com`. Restarting `cloudflared` issues a **new** URL.
+Look for `https://….trycloudflare.com`. Restarting `cloudflared` issues a **new**
+URL. The URL is **not** a security control.
 
-## Rate limiting
+## Rate limiting and client IP
 
-`POST /api/analyze`, `POST /api/ratios/parse`, `PUT /api/ratios`, reset and
-history restore are limited to **10 requests / 60 seconds per client IP**
-(in-memory, single uvicorn process).
+Analyze/config write routes are limited to **10 requests / 60 seconds per client
+IP** (in-memory, single uvicorn process).
+
+The backend does **not** trust client-supplied `X-Forwarded-For`. It prefers
+`CF-Connecting-IP` (Cloudflare), then `X-Real-IP` (set by Caddy from that header),
+then the direct peer. Caddy strips inbound `X-Forwarded-For` toward the app.
 
 ## Stop
 
 ```bash
 docker compose down
 # keeps ratios-data volume
+# if the tunnel profile was used:
+docker compose --profile tunnel down
 ```
 
 ## Notes for automation
 
 - Build from the Git work tree at the pinned SHA (Compose `build:` targets).
-- Do not rely on unversioned copies of source on the server.
-- Application images are built on the deployment host; CI image publishing is a later improvement.
+- Default compose must remain local-only; never enable `tunnel` unless requested.
+- Pin/bump `cloudflared` deliberately; do not return to `:latest`.
+- Application images are built on the deployment host; CI image publishing is later.
 - Prefer SSH keys for host access; do not put passwords in this repository.
-- Do not open router ports for this stack; the tunnel is outbound-only.
+- Do not open router ports; host Caddy is loopback-only.
