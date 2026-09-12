@@ -18,6 +18,7 @@ concurrency:
 
 permissions:
   contents: read
+  statuses: write
 
 env:
   DEPLOY_HOST: ai-server
@@ -34,7 +35,7 @@ jobs:
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
-      - name: Require Tailscale + deploy secrets
+      - name: Select deploy transport
         env:
           TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
@@ -42,15 +43,17 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
           set -euo pipefail
-          [[ -n "${DEPLOY_SSH_KEY}" ]] || { echo "Missing secret DEPLOY_SSH_KEY"; exit 1; }
           if [[ -n "${TS_OAUTH_CLIENT_ID}" && -n "${TS_OAUTH_SECRET}" ]]; then
-            echo "TS_MODE=oauth" >> "$GITHUB_ENV"
+            MODE=oauth
           elif [[ -n "${TAILSCALE_AUTHKEY}" ]]; then
-            echo "TS_MODE=authkey" >> "$GITHUB_ENV"
+            MODE=authkey
           else
-            echo "Need TS_OAUTH_CLIENT_ID+TS_OAUTH_SECRET OR TAILSCALE_AUTHKEY"
-            echo "Create auth key: Tailscale Admin → Settings → Keys → Generate (reusable, ephemeral, tag:ci)"
-            exit 1
+            MODE=host_agent
+            echo "No Tailscale secrets; using cd-host-agent handoff on ai-server"
+          fi
+          echo "TS_MODE=${MODE}" >> "$GITHUB_ENV"
+          if [[ "$MODE" == "oauth" || "$MODE" == "authkey" ]]; then
+            [[ -n "${DEPLOY_SSH_KEY}" ]] || { echo "Missing secret DEPLOY_SSH_KEY (required for Tailscale SSH deploy)"; exit 1; }
           fi
       - name: Connect Tailscale (OAuth)
         if: env.TS_MODE == 'oauth'
@@ -66,6 +69,7 @@ jobs:
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
       - name: Sync + rollback deploy
+        if: env.TS_MODE == 'oauth' || env.TS_MODE == 'authkey'
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           SHA: ${{ steps.meta.outputs.sha }}
@@ -82,3 +86,27 @@ jobs:
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "/data/deployments/jaarrekening-analyzer/bin/cd-apply.sh '${{ inputs.environment }}' ${SHA}" \
             < "${RUNNER_TEMP}/jaar-cd.tgz"
+      - name: Host-agent rollback handoff
+        if: env.TS_MODE == 'host_agent'
+        env:
+          SHA: ${{ steps.meta.outputs.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          CTX="cd-host/jaarrekening-analyzer/${{ inputs.environment }}"
+          gh api -X POST "repos/${{ github.repository }}/statuses/${SHA}" \
+            -f state=pending \
+            -f context="$CTX" \
+            -f description="deploy:${SHA}"
+          for i in $(seq 1 90); do
+            STATE="$(gh api "repos/${{ github.repository }}/commits/${SHA}/statuses" \
+              | jq -r --arg c "$CTX" '[.[]|select(.context==$c)][0].state // empty')"
+            echo "poll $i state=${STATE:-none}"
+            case "${STATE}" in
+              success) exit 0 ;;
+              failure|error) exit 1 ;;
+            esac
+            sleep 10
+          done
+          exit 1
+

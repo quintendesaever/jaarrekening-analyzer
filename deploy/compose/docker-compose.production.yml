@@ -1,4 +1,5 @@
 # Production CD stack: Tailscale-bound Caddy + optional named tunnel profile.
+# JAAR_PROD_BIND is Tailscale IP only (e.g. 100.66.108.109); compose appends :80:80.
 # Persistent data path set via JAAR_DATA_PATH in .image / host env (cutover uses
 # /data/apps/jaarrekening-analyzer/data — never wipe it).
 
