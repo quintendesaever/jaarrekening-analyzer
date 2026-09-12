@@ -1,0 +1,30 @@
+:80 {
+	request_body {
+		max_size 20MB
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		# SPA: hashed Vite assets only; pdf.js worker is same-origin module.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data blob:; font-src 'self' data:; connect-src 'self' blob:; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+	}
+
+	handle /api/* {
+		reverse_proxy app:8000 {
+			# Drop client-supplied forwarding headers; backend trusts
+			# CF-Connecting-IP (Cloudflare) or the direct peer (Caddy).
+			header_up -X-Forwarded-For
+			header_up -X-Real-IP
+			# Pass Cloudflare's connecting IP when present (Quick Tunnel / named tunnel).
+			header_up X-Real-IP {http.request.header.CF-Connecting-IP}
+		}
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -16,7 +16,7 @@ dist/
 dist-ssr/
 *.tsbuildinfo
 
-# Local persisted ratio overrides (admin save)
+# Local persisted ratio overrides (admin save / non-volume host copies)
 backend/data/
 
 # OS & editors
@@ -34,19 +34,21 @@ Thumbs.db
 # Local git hooks (niet op GitHub)
 .githooks/
 
-# Tests: keep local extras (PDFs, scratch) out of git; track pytest modules
+# Tests: keep local extras (scratch) out of git; track pytest modules
 backend/tests/*
 !backend/tests/test_*.py
 
-# Secrets
+# Secrets — never commit real values
 .env
 .env.*
 !.env.example
 
-# Docker / local server deploy (niet op GitHub)
-Dockerfile
-docker-compose.yml
+# Optional local Compose overlays (tracked file is docker-compose.yml only)
 docker-compose.*.yml
-Caddyfile
-.dockerignore
-DEPLOY.md
+docker-compose.override.yml
+
+# Runtime / uploads / logs (not application source)
+*.log
+uploads/
+*.pdf
+!backend/tests/**/*.pdf
