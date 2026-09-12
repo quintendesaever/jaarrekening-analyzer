@@ -94,14 +94,17 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
           set -euo pipefail
-          [[ -n "${DEPLOY_SSH_KEY}" ]] || { echo "Missing secret DEPLOY_SSH_KEY"; exit 1; }
           if [[ -n "${TS_OAUTH_CLIENT_ID}" && -n "${TS_OAUTH_SECRET}" ]]; then
-            echo "TS_MODE=oauth" >> "$GITHUB_ENV"
+            MODE=oauth
           elif [[ -n "${TAILSCALE_AUTHKEY}" ]]; then
-            echo "TS_MODE=authkey" >> "$GITHUB_ENV"
+            MODE=authkey
           else
-            echo "TS_MODE=host_agent" >> "$GITHUB_ENV"
+            MODE=host_agent
             echo "No Tailscale secrets; using cd-host-agent handoff on ai-server"
+          fi
+          echo "TS_MODE=${MODE}" >> "$GITHUB_ENV"
+          if [[ "$MODE" == "oauth" || "$MODE" == "authkey" ]]; then
+            [[ -n "${DEPLOY_SSH_KEY}" ]] || { echo "Missing secret DEPLOY_SSH_KEY (required for Tailscale SSH deploy)"; exit 1; }
           fi
       - name: Connect Tailscale (OAuth)
         if: env.TS_MODE == 'oauth'
@@ -181,14 +184,17 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
           set -euo pipefail
-          [[ -n "${DEPLOY_SSH_KEY}" ]] || { echo "Missing secret DEPLOY_SSH_KEY"; exit 1; }
           if [[ -n "${TS_OAUTH_CLIENT_ID}" && -n "${TS_OAUTH_SECRET}" ]]; then
-            echo "TS_MODE=oauth" >> "$GITHUB_ENV"
+            MODE=oauth
           elif [[ -n "${TAILSCALE_AUTHKEY}" ]]; then
-            echo "TS_MODE=authkey" >> "$GITHUB_ENV"
+            MODE=authkey
           else
-            echo "TS_MODE=host_agent" >> "$GITHUB_ENV"
+            MODE=host_agent
             echo "No Tailscale secrets; using cd-host-agent handoff on ai-server"
+          fi
+          echo "TS_MODE=${MODE}" >> "$GITHUB_ENV"
+          if [[ "$MODE" == "oauth" || "$MODE" == "authkey" ]]; then
+            [[ -n "${DEPLOY_SSH_KEY}" ]] || { echo "Missing secret DEPLOY_SSH_KEY (required for Tailscale SSH deploy)"; exit 1; }
           fi
       - name: Connect Tailscale (OAuth)
         if: env.TS_MODE == 'oauth'

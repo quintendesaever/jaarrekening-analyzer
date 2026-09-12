@@ -6,7 +6,9 @@ set -euo pipefail
 APPS="/data/apps/jaarrekening-analyzer"
 PROD="/data/deployments/jaarrekening-analyzer/production"
 BIN="/data/deployments/jaarrekening-analyzer/bin/deploy.sh"
+# Override if Tailscale IP changes; default matches CURRENT_STATE ai-server.
 HEALTH_URL="${JAAR_PUBLIC_HEALTH_URL:-http://100.66.108.109/api/health}"
+REQUIRE_TUNNEL="${JAAR_CUTOVER_REQUIRE_TUNNEL:-1}"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 log() { echo "[jaar-cutover] $*"; }
@@ -26,7 +28,8 @@ echo "Live: $APPS"
 echo "CD:   $PROD"
 echo "SHA:  $SHA"
 echo "Data: $APPS/data (shared intentionally at cutover)"
-echo "Health: $HEALTH_URL"
+echo "Health: $HEALTH_URL (override with JAAR_PUBLIC_HEALTH_URL)"
+echo "Require tunnel profile: $REQUIRE_TUNNEL"
 echo
 
 if [[ "$APPLY" -ne 1 ]]; then
@@ -45,9 +48,6 @@ live_down() {
   docker compose --project-directory "$APPS" -f "$APPS/docker-compose.yml" stop
 }
 prod_down() {
-  # shellcheck disable=SC1091
-  set -a
-  # compose needs .image; may be missing before first deploy
   [[ -f "$PROD/.image" ]] || return 0
   docker compose --project-directory "$PROD" \
     --env-file "$PROD/.env" \
@@ -88,21 +88,26 @@ revert_live() {
   curl -fsS -m 10 "$HEALTH_URL" || log "WARN: health still down after revert"
 }
 
-# deploy.sh production does not enable tunnel profile — start with profile after deploy
-# Patch: call deploy then ensure tunnel profile up
 if ! "$BIN" production "$SHA"; then
   revert_live
   die "CD production deploy failed; live restored"
 fi
 
-# Bring tunnel profile if defined (matches live public path)
-docker compose --project-directory "$PROD" \
+# Bring tunnel profile (matches live public Cloudflare path)
+log "starting tunnel profile"
+if ! docker compose --project-directory "$PROD" \
   --env-file "$PROD/.env" \
   --env-file "$PROD/.image" \
   -f "$PROD/docker-compose.yml" \
   -f "$PROD/docker-compose.production.yml" \
   --profile tunnel \
-  up -d --remove-orphans || true
+  up -d --remove-orphans; then
+  if [[ "$REQUIRE_TUNNEL" == "1" ]]; then
+    revert_live
+    die "tunnel profile failed to start; live restored (set JAAR_CUTOVER_REQUIRE_TUNNEL=0 to allow Tailscale-only)"
+  fi
+  log "WARN: tunnel profile failed; continuing (JAAR_CUTOVER_REQUIRE_TUNNEL=0)"
+fi
 
 if ! verify; then
   revert_live
