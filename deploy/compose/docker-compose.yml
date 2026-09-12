@@ -1,0 +1,40 @@
+# Shared Jaarrekening runtime — images from GHCR (never built on the server).
+# Requires:
+#   JAAR_APP_IMAGE=ghcr.io/quintendesaever/jaarrekening-analyzer:<40-hex-sha>
+#   JAAR_CADDY_IMAGE=ghcr.io/quintendesaever/jaarrekening-analyzer-caddy:<40-hex-sha>
+#   JAAR_DATA_PATH=host path for persistent /data (never share staging↔production)
+# and sibling .env (ADMIN_TOKEN, mode 0600).
+
+services:
+  app:
+    image: ${JAAR_APP_IMAGE:?set JAAR_APP_IMAGE}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      RATIOS_CONFIG_PATH: /data/ratios.yaml
+      TABLES_CONFIG_PATH: /data/tables.yaml
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+    volumes:
+      - ${JAAR_DATA_PATH:?set JAAR_DATA_PATH}:/data
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    image: ${JAAR_CADDY_IMAGE:?set JAAR_CADDY_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy

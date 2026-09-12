@@ -1,0 +1,161 @@
+# Continuous Delivery — after CI succeeds on main.
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_production:
+        description: "Stop after staging"
+        type: boolean
+        default: true
+
+concurrency:
+  group: jaarrekening-cd-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  actions: read
+
+env:
+  APP_IMAGE: ghcr.io/quintendesaever/jaarrekening-analyzer
+  CADDY_IMAGE: ghcr.io/quintendesaever/jaarrekening-analyzer-caddy
+  DEPLOY_HOST: ai-server
+  # INTERIM: quinten + jaar forced-command key (see docs/deployment.md)
+  DEPLOY_USER: quinten
+
+jobs:
+  ci-gate:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      sha: ${{ steps.ref.outputs.sha }}
+    steps:
+      - id: ref
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            RAW="${{ github.event.workflow_run.head_sha }}"
+          else
+            RAW="${{ github.sha }}"
+          fi
+          SHA="$(echo -n "$RAW" | tr '[:upper:]' '[:lower:]')"
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+  build-and-push:
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.ci-gate.outputs.sha }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push app + caddy
+        run: |
+          set -euo pipefail
+          SHA="${{ needs.ci-gate.outputs.sha }}"
+          docker buildx build --target backend \
+            -t "${APP_IMAGE}:${SHA}" -t "${APP_IMAGE}:main" \
+            --label "org.opencontainers.image.revision=${SHA}" \
+            --push .
+          docker buildx build --target caddy \
+            -t "${CADDY_IMAGE}:${SHA}" -t "${CADDY_IMAGE}:main" \
+            --label "org.opencontainers.image.revision=${SHA}" \
+            --push .
+
+  deploy-staging:
+    needs: [ci-gate, build-and-push]
+    runs-on: ubuntu-latest
+    environment: staging
+    concurrency:
+      group: jaarrekening-deploy-staging
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.ci-gate.outputs.sha }}
+      - name: Require Tailscale + deploy secrets
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "${TS_OAUTH_CLIENT_ID}" && -n "${TS_OAUTH_SECRET}" && -n "${DEPLOY_SSH_KEY}" ]] \
+            || { echo "Missing TS_OAUTH_* or DEPLOY_SSH_KEY"; exit 1; }
+      - uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+      - name: Sync + deploy staging
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SHA: ${{ needs.ci-gate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          install -m 600 /dev/null "${RUNNER_TEMP}/deploy_key"
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > "${RUNNER_TEMP}/deploy_key"
+          tar -C deploy -czf "${RUNNER_TEMP}/jaar-cd.tgz" \
+            deploy.sh cd-apply.sh ssh-forced-command.sh compose known_hosts
+          ssh -i "${RUNNER_TEMP}/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="${GITHUB_WORKSPACE}/deploy/known_hosts" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "/data/deployments/jaarrekening-analyzer/bin/cd-apply.sh staging ${SHA}" \
+            < "${RUNNER_TEMP}/jaar-cd.tgz"
+
+  deploy-production:
+    needs: [ci-gate, build-and-push, deploy-staging]
+    if: ${{ github.event_name == 'workflow_run' || inputs.skip_production != true }}
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: jaarrekening-deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.ci-gate.outputs.sha }}
+      - name: Require Tailscale + deploy secrets
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "${TS_OAUTH_CLIENT_ID}" && -n "${TS_OAUTH_SECRET}" && -n "${DEPLOY_SSH_KEY}" ]] || exit 1
+      - uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+      - name: Sync + deploy production
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SHA: ${{ needs.ci-gate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          install -m 600 /dev/null "${RUNNER_TEMP}/deploy_key"
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > "${RUNNER_TEMP}/deploy_key"
+          tar -C deploy -czf "${RUNNER_TEMP}/jaar-cd.tgz" \
+            deploy.sh cd-apply.sh ssh-forced-command.sh compose known_hosts
+          ssh -i "${RUNNER_TEMP}/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="${GITHUB_WORKSPACE}/deploy/known_hosts" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "/data/deployments/jaarrekening-analyzer/bin/cd-apply.sh production ${SHA}" \
+            < "${RUNNER_TEMP}/jaar-cd.tgz"
