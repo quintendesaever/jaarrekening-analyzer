@@ -11,7 +11,7 @@ on:
       skip_production:
         description: "Stop after staging"
         type: boolean
-        default: true
+        default: false
 
 concurrency:
   group: jaarrekening-cd-main
