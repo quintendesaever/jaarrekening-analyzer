@@ -5,8 +5,9 @@ function bytesToHex(bytes: Uint8Array): string {
 /**
  * Pure JS SHA-256 for non-secure contexts (plain HTTP).
  * Browsers omit crypto.subtle outside HTTPS / localhost.
+ * Keep this name distinct so minifiers do not collide with app identifiers.
  */
-function sha256HexFallback(data: ArrayBuffer): string {
+function computeSha256HexPure(data: ArrayBuffer): string {
   const K = new Uint32Array([
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
     0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
@@ -115,15 +116,19 @@ function sha256HexFallback(data: ArrayBuffer): string {
 export async function sha256Hex(data: ArrayBuffer): Promise<string> {
   const subtle = globalThis.crypto?.subtle;
   if (subtle) {
-    const digest = await subtle.digest("SHA-256", data);
-    return bytesToHex(new Uint8Array(digest));
+    try {
+      const digest = await subtle.digest("SHA-256", data);
+      return bytesToHex(new Uint8Array(digest));
+    } catch {
+      // Fall through to pure JS if SubtleCrypto is present but unusable.
+    }
   }
-  return sha256HexFallback(data);
+  return computeSha256HexPure(data);
 }
 
 /** Exported for regression checks against Node crypto (no subtle). */
 export function sha256HexWithoutSubtle(data: ArrayBuffer): string {
-  return sha256HexFallback(data);
+  return computeSha256HexPure(data);
 }
 
 export async function hashBlob(blob: Blob): Promise<string> {

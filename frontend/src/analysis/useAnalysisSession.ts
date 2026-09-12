@@ -130,16 +130,10 @@ export function useAnalysisSession() {
   const applyJobSuccess = useCallback(
     async (payload: AnalyzeJobStatus, file: File) => {
       if (!payload.result) return;
-      // Hash is best-effort: never hide a completed analysis if hashing fails
-      // (e.g. older builds without a crypto.subtle fallback on plain HTTP).
-      let hash: string | null = null;
-      try {
-        hash = await hashFile(file);
-      } catch {
-        // Continue without contentHash / cache.
-      }
-      setResult(payload.result);
-      setContentHash(hash);
+      const result = payload.result;
+      // Show results immediately. Hashing/cache must never keep status on
+      // "analyzing" after the job already finished (all stages klaar).
+      setResult(result);
       setStale(false);
       setStatus("completed");
       setError(null);
@@ -150,12 +144,17 @@ export function useAnalysisSession() {
       setOverlayValidations(null);
       setRecomputeState("idle");
       setRecomputeError(null);
-      if (hash) {
+
+      try {
+        const hash = await hashFile(file);
+        setContentHash(hash);
         try {
-          await saveCachedAnalysis(payload.result, file, file.name);
+          await saveCachedAnalysis(result, file, file.name);
         } catch {
           // Persistence failure must not hide a successful analysis.
         }
+      } catch {
+        // Hash is optional (e.g. plain HTTP without SubtleCrypto).
       }
     },
     [],
