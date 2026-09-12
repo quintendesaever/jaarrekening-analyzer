@@ -130,7 +130,14 @@ export function useAnalysisSession() {
   const applyJobSuccess = useCallback(
     async (payload: AnalyzeJobStatus, file: File) => {
       if (!payload.result) return;
-      const hash = await hashFile(file);
+      // Hash is best-effort: never hide a completed analysis if hashing fails
+      // (e.g. older builds without a crypto.subtle fallback on plain HTTP).
+      let hash: string | null = null;
+      try {
+        hash = await hashFile(file);
+      } catch {
+        // Continue without contentHash / cache.
+      }
       setResult(payload.result);
       setContentHash(hash);
       setStale(false);
@@ -143,10 +150,12 @@ export function useAnalysisSession() {
       setOverlayValidations(null);
       setRecomputeState("idle");
       setRecomputeError(null);
-      try {
-        await saveCachedAnalysis(payload.result, file, file.name);
-      } catch {
-        // Persistence failure must not hide a successful analysis.
+      if (hash) {
+        try {
+          await saveCachedAnalysis(payload.result, file, file.name);
+        } catch {
+          // Persistence failure must not hide a successful analysis.
+        }
       }
     },
     [],
