@@ -1,0 +1,57 @@
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [staging, production]
+        required: true
+      image_sha:
+        description: "40-char commit SHA already in GHCR"
+        required: true
+        type: string
+
+concurrency:
+  group: jaarrekening-deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DEPLOY_HOST: ai-server
+  DEPLOY_USER: quinten
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - id: meta
+        run: |
+          SHA="$(echo -n "${{ inputs.image_sha }}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+      - uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+      - env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SHA: ${{ steps.meta.outputs.sha }}
+        run: |
+          set -euo pipefail
+          install -m 600 /dev/null "${RUNNER_TEMP}/deploy_key"
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > "${RUNNER_TEMP}/deploy_key"
+          tar -C deploy -czf "${RUNNER_TEMP}/jaar-cd.tgz" \
+            deploy.sh cd-apply.sh ssh-forced-command.sh compose known_hosts
+          ssh -i "${RUNNER_TEMP}/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="${GITHUB_WORKSPACE}/deploy/known_hosts" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "/data/deployments/jaarrekening-analyzer/bin/cd-apply.sh '${{ inputs.environment }}' ${SHA}" \
+            < "${RUNNER_TEMP}/jaar-cd.tgz"
