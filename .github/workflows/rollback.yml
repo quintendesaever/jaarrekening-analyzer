@@ -34,12 +34,39 @@ jobs:
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
-      - uses: tailscale/github-action@v4
+      - name: Require Tailscale + deploy secrets
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "${DEPLOY_SSH_KEY}" ]] || { echo "Missing secret DEPLOY_SSH_KEY"; exit 1; }
+          if [[ -n "${TS_OAUTH_CLIENT_ID}" && -n "${TS_OAUTH_SECRET}" ]]; then
+            echo "TS_MODE=oauth" >> "$GITHUB_ENV"
+          elif [[ -n "${TAILSCALE_AUTHKEY}" ]]; then
+            echo "TS_MODE=authkey" >> "$GITHUB_ENV"
+          else
+            echo "Need TS_OAUTH_CLIENT_ID+TS_OAUTH_SECRET OR TAILSCALE_AUTHKEY"
+            echo "Create auth key: Tailscale Admin → Settings → Keys → Generate (reusable, ephemeral, tag:ci)"
+            exit 1
+          fi
+      - name: Connect Tailscale (OAuth)
+        if: env.TS_MODE == 'oauth'
+        uses: tailscale/github-action@v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
-      - env:
+
+      - name: Connect Tailscale (auth key)
+        if: env.TS_MODE == 'authkey'
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+      - name: Sync + rollback deploy
+        env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           SHA: ${{ steps.meta.outputs.sha }}
         run: |
