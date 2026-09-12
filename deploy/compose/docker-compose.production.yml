@@ -1,0 +1,29 @@
+# Production CD stack: Tailscale-bound Caddy + optional named tunnel profile.
+# Persistent data path set via JAAR_DATA_PATH in .image / host env (cutover uses
+# /data/apps/jaarrekening-analyzer/data — never wipe it).
+
+name: jaarrekening-production
+
+services:
+  caddy:
+    ports:
+      - "${JAAR_PROD_BIND:?set JAAR_PROD_BIND in production .env}:80:80"
+
+  cloudflared:
+    profiles:
+      - tunnel
+    image: cloudflare/cloudflared:2026.9.0@sha256:ff69a2225ad7c6f85ed84fbd5f3087df46202426b2388ec60214098e0adf05e9
+    restart: unless-stopped
+    user: "1000:1000"
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN_FILE: /run/secrets/jaarrekening_tunnel_token
+    secrets:
+      - jaarrekening_tunnel_token
+    depends_on:
+      caddy:
+        condition: service_started
+
+secrets:
+  jaarrekening_tunnel_token:
+    file: /data/ai-platform/secrets/jaarrekening-cloudflare-tunnel-token

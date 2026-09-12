@@ -52,3 +52,6 @@ docker-compose.override.yml
 uploads/
 *.pdf
 !backend/tests/**/*.pdf
+
+# CD overlays under deploy/compose must be tracked
+!deploy/compose/docker-compose.*.yml

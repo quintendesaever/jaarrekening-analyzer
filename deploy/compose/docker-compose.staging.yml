@@ -1,0 +1,9 @@
+# Staging: Tailscale bind only. Separate data dir. No tunnel.
+# Host .env must set JAAR_STAGING_BIND (e.g. 100.66.108.109).
+
+name: jaarrekening-staging
+
+services:
+  caddy:
+    ports:
+      - "${JAAR_STAGING_BIND:?set JAAR_STAGING_BIND in staging .env}:8080:80"
