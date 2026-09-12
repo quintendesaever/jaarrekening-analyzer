@@ -162,7 +162,8 @@ jobs:
 
   deploy-production:
     needs: [ci-gate, build-and-push, deploy-staging]
-    if: ${{ github.event_name == 'workflow_run' || inputs.skip_production != true }}
+    # Production only via attended workflow_dispatch (skip_production=false).
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_production != true }}
     runs-on: ubuntu-latest
     environment: production
     concurrency:
