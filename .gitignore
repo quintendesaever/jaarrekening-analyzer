@@ -34,11 +34,9 @@ Thumbs.db
 # Local git hooks (niet op GitHub)
 .githooks/
 
-# Tests (lokaal, behalve tracked tests)
+# Tests: keep local extras (scratch) out of git; track pytest modules
 backend/tests/*
-!backend/tests/test_ratio_config.py
-!backend/tests/test_table_config.py
-!backend/tests/test_rate_limit_client_ip.py
+!backend/tests/test_*.py
 
 # Secrets — never commit real values
 .env
