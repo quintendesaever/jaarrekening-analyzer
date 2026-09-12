@@ -3,6 +3,10 @@ name: Publish image
 
 on:
   workflow_dispatch:
+  # SHA-only tags; allowed on this feature branch so GHCR can be proven before merge.
+  # Remove the push trigger after merge (workflow_dispatch + CD remain).
+  push:
+    branches: [feat/continuous-delivery]
 
 permissions:
   contents: read
