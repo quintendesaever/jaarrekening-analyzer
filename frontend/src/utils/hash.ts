@@ -4,7 +4,7 @@ function bytesToHex(bytes: Uint8Array): string {
 
 /**
  * Pure JS SHA-256 for non-secure contexts (plain HTTP).
- * Browsers omit crypto.subtle outside HTTPS / localhost; Tailscale staging is HTTP.
+ * Browsers omit crypto.subtle outside HTTPS / localhost.
  */
 function sha256HexFallback(data: ArrayBuffer): string {
   const K = new Uint32Array([
