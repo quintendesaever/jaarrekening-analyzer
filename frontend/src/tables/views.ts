@@ -38,6 +38,27 @@ export function defaultSelectedModels(): ModelKind[] {
   return ["full"];
 }
 
+/**
+ * Keep a non-empty selection when switching tabs.
+ * Cashflow / balans: preserve any subset.
+ * Results: keep Full alone or Verkort/Micro. A mixed Full+short
+ * selection drops Full so the short-model work is not discarded.
+ */
+export function normalizeSelectedModels(
+  view: TabellenViewId,
+  selected: ModelKind[],
+): ModelKind[] {
+  const next = MODEL_ORDER.filter((kind) => selected.includes(kind));
+  if (next.length === 0) return defaultSelectedModels();
+  if (view !== "herwerkte_resultatenrekening") return next;
+
+  const hasFull = next.includes("full");
+  const shorts = next.filter((kind) => kind === "verkort" || kind === "micro");
+  if (hasFull && shorts.length > 0) return shorts;
+  if (hasFull) return ["full"];
+  return shorts;
+}
+
 export function formatModelList(models: ModelKind[]): string {
   return models.map((kind) => MODEL_LABELS[kind]).join(", ");
 }

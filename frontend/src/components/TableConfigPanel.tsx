@@ -20,6 +20,7 @@ import {
   defaultSelectedModels,
   formatModelList,
   MODEL_ORDER,
+  normalizeSelectedModels,
   resultGroupForModels,
   tableIdForView,
   toggleModelSelection,
@@ -134,7 +135,7 @@ export function TableConfigPanel({ onDirtyChange }: TableConfigPanelProps) {
   const activeTable = draft.find((table) => table.id === activeTableId) ?? null;
 
   useEffect(() => {
-    setSelectedModels(defaultSelectedModels());
+    setSelectedModels((current) => normalizeSelectedModels(view, current));
   }, [view]);
 
   useEffect(() => {
