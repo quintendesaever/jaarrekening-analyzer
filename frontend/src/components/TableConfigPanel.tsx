@@ -49,15 +49,30 @@ function TableConfigHelp() {
               resultatenrekening).
             </li>
             <li>
-              Bij de resultatenrekening kies je{" "}
-              <span className="font-medium text-slate-700">Volledig</span> of{" "}
-              <span className="font-medium text-slate-700">Verkort + Micro</span>{" "}
-              — die twee groepen hebben een andere tabelstructuur.
+              Bij de resultatenrekening: eerst{" "}
+              <span className="font-medium text-slate-700">
+                1. Kies modelstructuur
+              </span>{" "}
+              (<span className="font-medium text-slate-700">Volledig</span> of{" "}
+              <span className="font-medium text-slate-700">Verkort + Micro</span>
+              — andere tabelstructuur).
             </li>
             <li>
-              <span className="font-medium text-slate-700">Alle</span> bewerkt
-              de gedeelde celformules. Eén model bewerkt alleen de
-              model-specifieke override.
+              Daarna{" "}
+              <span className="font-medium text-slate-700">
+                2. Bewerk formules voor
+              </span>
+              : <span className="font-medium text-slate-700">Alle</span> wijzigt
+              de gedeelde celformules; één model wijzigt alleen die override.
+              Bij Volledig ontbreekt die tweede stap: dat model heeft een eigen
+              tabel.
+            </li>
+            <li>
+              Bij cashflow en balans kies je{" "}
+              <span className="font-medium text-slate-700">
+                Bewerk formules voor
+              </span>{" "}
+              Alle of één model.
             </li>
             <li>
               Rijlabels, volgorde, inspringing, toelichting, rijen en kolommen
@@ -516,45 +531,57 @@ export function TableConfigPanel({ onDirtyChange }: TableConfigPanelProps) {
           <SubTabs items={VIEW_ITEMS} value={view} onChange={setView} />
 
           {view === "herwerkte_resultatenrekening" && (
-            <div
-              role="group"
-              aria-label="Resultatenrekening variant"
-              className="inline-flex overflow-hidden rounded-lg ring-1 ring-slate-200"
-            >
-              <button
-                type="button"
-                onClick={() => setResultGroup("full")}
-                className={`px-3 py-1.5 text-sm font-medium ${
-                  resultGroup === "full"
-                    ? "bg-slate-800 text-white"
-                    : "bg-white text-slate-600 hover:bg-slate-50"
-                }`}
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-slate-500">
+                1. Kies modelstructuur
+              </span>
+              <div
+                role="group"
+                aria-label="Kies modelstructuur"
+                className="inline-flex overflow-hidden rounded-lg ring-1 ring-slate-200"
               >
-                {MODEL_LABELS.full}
-              </button>
-              <button
-                type="button"
-                onClick={() => setResultGroup("verkort_micro")}
-                className={`px-3 py-1.5 text-sm font-medium ${
-                  resultGroup === "verkort_micro"
-                    ? "bg-slate-800 text-white"
-                    : "bg-white text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                Verkort + Micro
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setResultGroup("full")}
+                  aria-pressed={resultGroup === "full"}
+                  className={`px-3 py-1.5 text-sm font-medium ${
+                    resultGroup === "full"
+                      ? "bg-slate-800 text-white"
+                      : "bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {MODEL_LABELS.full}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResultGroup("verkort_micro")}
+                  aria-pressed={resultGroup === "verkort_micro"}
+                  className={`px-3 py-1.5 text-sm font-medium ${
+                    resultGroup === "verkort_micro"
+                      ? "bg-slate-800 text-white"
+                      : "bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  Verkort + Micro
+                </button>
+              </div>
             </div>
           )}
 
           {activeTable && (
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex w-full flex-wrap items-center gap-3">
               {activeTable.model_scope.length > 1 && (
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                    Bewerk
+                  <span className="text-xs font-medium text-slate-500">
+                    {view === "herwerkte_resultatenrekening"
+                      ? "2. Bewerk formules voor"
+                      : "Bewerk formules voor"}
                   </span>
-                  <div role="group" aria-label="Model bewerken" className="inline-flex flex-wrap gap-1">
-                    {/* "Alle" = null / all-mode */}
+                  <div
+                    role="group"
+                    aria-label="Bewerk formules voor"
+                    className="inline-flex flex-wrap gap-1"
+                  >
                     <button
                       type="button"
                       aria-pressed={editModel === null}
@@ -598,7 +625,7 @@ export function TableConfigPanel({ onDirtyChange }: TableConfigPanelProps) {
                   </div>
                 </div>
               )}
-              <div className="flex shrink-0 gap-1.5">
+              <div className="ml-auto flex shrink-0 gap-1.5">
                 <button
                   type="button"
                   disabled={saving || loading}
