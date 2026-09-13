@@ -45,6 +45,53 @@ export function updateCellsForModel(
   };
 }
 
+export function effectiveCellValues(
+  row: TableRow,
+  models: ModelKind[],
+  cellIndex: number,
+  columnCount: number,
+): string[] {
+  return models.map(
+    (model) => cellsForModel(row, model, columnCount)[cellIndex] ?? "",
+  );
+}
+
+export function cellValuesAreMixed(values: string[]): boolean {
+  if (values.length <= 1) return false;
+  return values.some((value) => value !== values[0]);
+}
+
+/**
+ * Write one cell for each selected model.
+ * Never promotes to shared `row.cells` just because every in-scope model is selected.
+ * Single-scope tables still store the value in shared cells (existing backend shape).
+ */
+export function updateCellForModels(
+  row: TableRow,
+  models: ModelKind[],
+  cellIndex: number,
+  value: string,
+  columnCount: number,
+  modelsInScope: ModelKind[],
+): TableRow {
+  const targets = models.filter((model) => modelsInScope.includes(model));
+  if (targets.length === 0) return row;
+
+  if (modelsInScope.length <= 1) {
+    const cells = padCells(row.cells, columnCount);
+    cells[cellIndex] = value;
+    return { ...row, cells };
+  }
+
+  const cellsByModel = { ...row.cells_by_model };
+  for (const model of targets) {
+    const cells = cellsForModel(row, model, columnCount);
+    cells[cellIndex] = value;
+    cellsByModel[model] = cells;
+  }
+  return { ...row, cells_by_model: cellsByModel };
+}
+
 export function inferModelFromSchema(
   schema: string | null | undefined,
 ): ModelKind | null {
