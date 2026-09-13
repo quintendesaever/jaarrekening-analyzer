@@ -8,8 +8,6 @@ interface ModelMultiSelectProps {
   hasOverrides?: (kind: ModelKind) => boolean;
   label?: string;
   ariaLabel?: string;
-  /** Override toggle rules (compatibility, never-empty, etc.). */
-  resolveToggle?: (selected: ModelKind[], clicked: ModelKind) => ModelKind[];
 }
 
 export function ModelMultiSelect({
@@ -17,19 +15,12 @@ export function ModelMultiSelect({
   selected,
   onChange,
   hasOverrides,
-  label = "Modellen",
+  label = "Bewerk",
   ariaLabel = "Model selectie",
-  resolveToggle,
 }: ModelMultiSelectProps) {
-  if (models.length === 0) return null;
+  if (models.length <= 1) return null;
 
   function toggle(kind: ModelKind) {
-    if (resolveToggle) {
-      const next = resolveToggle(selected, kind);
-      if (next.length === 0) return;
-      onChange(next);
-      return;
-    }
     if (selected.includes(kind)) {
       if (selected.length === 1) return;
       onChange(selected.filter((item) => item !== kind));

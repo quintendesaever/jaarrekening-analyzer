@@ -6,10 +6,8 @@ import {
 } from "../tables/cellRefs";
 import {
   cellsForModel,
-  cellValuesAreMixed,
-  effectiveCellValues,
+  updateCellsForModel,
   rowHasModelOverride,
-  updateCellForModels,
 } from "../tables/rowCells";
 import type {
   AmountFormat,
@@ -36,16 +34,11 @@ interface EditableFinancialTableProps {
   amountFormat?: AmountFormat;
   ratioSpecs?: RatioSpec[];
   /**
-   * Read-only / single-model fallback. Prefer `activeModels` in configuration.
-   * Ignored when `activeModels` is a non-empty list.
+   * Which single model to show/edit.
+   * null / undefined = "all models" mode: reads/writes shared cells (row.cells).
+   * A specific ModelKind = reads/writes that model's override (cells_by_model).
    */
   activeModel?: ModelKind | null;
-  /**
-   * Models whose cell formulas are shown and edited.
-   * Edits write each selected model's override; they never promote to shared
-   * `row.cells` just because every in-scope model is selected.
-   */
-  activeModels?: ModelKind[];
 }
 
 const MAX_INDENT = 6;
@@ -117,19 +110,19 @@ function cellPlaceholder(column: TableColumn, index: number): string {
   return "";
 }
 
-function resolveActiveModels(
-  activeModels: ModelKind[] | undefined,
-  activeModel: ModelKind | null | undefined,
-  scope: ModelKind[],
-): ModelKind[] {
-  if (activeModels && activeModels.length > 0) {
-    const filtered = activeModels.filter((kind) => scope.includes(kind));
-    if (filtered.length > 0) return filtered;
-  }
-  if (activeModel != null && scope.includes(activeModel)) {
-    return [activeModel];
-  }
-  return scope.length > 0 ? [scope[0]] : [];
+/** True when any model in scope has an override that differs from the shared value. */
+function cellHasDivergentOverrides(
+  row: TableRow,
+  cellIndex: number,
+  modelsInScope: ModelKind[],
+): boolean {
+  if (modelsInScope.length <= 1) return false;
+  const shared = row.cells[cellIndex] ?? "";
+  return modelsInScope.some((kind) => {
+    const override = row.cells_by_model?.[kind];
+    if (!override) return false;
+    return (override[cellIndex] ?? "") !== shared;
+  });
 }
 
 export function addTableRow(table: FinancialTableConfig): FinancialTableConfig {
@@ -176,30 +169,18 @@ export function EditableFinancialTable({
   amountFormat = "full",
   ratioSpecs = [],
   activeModel,
-  activeModels,
 }: EditableFinancialTableProps) {
-  const selectedModels = resolveActiveModels(
-    activeModels,
-    activeModel,
-    table.model_scope,
-  );
-  const displayModel = selectedModels[0] ?? table.model_scope[0] ?? "full";
+  // null/undefined = "all" mode, reads/writes shared row.cells
+  // a specific model = override mode for that model
+  const allMode = activeModel == null;
+  const displayModel = allMode
+    ? (table.model_scope[0] ?? "full")
+    : activeModel;
   const columnCount = table.columns.length;
 
   function displayRow(row: TableRow): TableRow {
-    if (selectedModels.length <= 1) {
-      return { ...row, cells: cellsForModel(row, displayModel, columnCount) };
-    }
-    const cells = table.columns.map((_, cellIndex) => {
-      const values = effectiveCellValues(
-        row,
-        selectedModels,
-        cellIndex,
-        columnCount,
-      );
-      return cellValuesAreMixed(values) ? "" : (values[0] ?? "");
-    });
-    return { ...row, cells };
+    if (allMode) return row; // show shared cells directly
+    return { ...row, cells: cellsForModel(row, displayModel, columnCount) };
   }
 
   function patch(next: FinancialTableConfig) {
@@ -238,16 +219,19 @@ export function EditableFinancialTable({
   }
 
   function updateCell(rowIndex: number, cellIndex: number, value: string) {
-    updateRow(rowIndex, (row) =>
-      updateCellForModels(
-        row,
-        selectedModels,
-        cellIndex,
-        value,
-        columnCount,
-        table.model_scope,
-      ),
-    );
+    updateRow(rowIndex, (row) => {
+      if (allMode) {
+        // Write to shared cells; clear any override that now matches
+        const cells = [...row.cells];
+        cells[cellIndex] = value;
+        return { ...row, cells };
+      }
+      // Write to the specific model override
+      const current = cellsForModel(row, displayModel, columnCount);
+      const cells = [...current];
+      cells[cellIndex] = value;
+      return updateCellsForModel(row, displayModel, cells, table.model_scope);
+    });
   }
 
   function removeColumn(index: number) {
@@ -416,20 +400,18 @@ export function EditableFinancialTable({
                           })
                         : null;
 
-                    const values = effectiveCellValues(
-                      row,
-                      selectedModels,
-                      cellIndex,
-                      columnCount,
-                    );
-                    const mixed =
-                      editable && cellValuesAreMixed(values);
+                    // In all-mode, show indicator when per-model overrides diverge
+                    const diverges =
+                      editable &&
+                      allMode &&
+                      table.model_scope.length > 1 &&
+                      cellHasDivergentOverrides(row, cellIndex, table.model_scope);
+
+                    // In single-model mode, show indicator if this model has an override
                     const hasOverride =
                       editable &&
-                      !mixed &&
-                      selectedModels.some((kind) =>
-                        rowHasModelOverride(row, kind),
-                      );
+                      !allMode &&
+                      rowHasModelOverride(row, displayModel);
 
                     return (
                       <td
@@ -444,7 +426,6 @@ export function EditableFinancialTable({
                           <div className="relative">
                             <CellRefInput
                               value={raw}
-                              mixed={mixed}
                               disabled={disabled}
                               column={column}
                               cellIndex={cellIndex}
@@ -457,6 +438,12 @@ export function EditableFinancialTable({
                                 updateCell(rowIndex, cellIndex, value)
                               }
                             />
+                            {diverges && (
+                              <span
+                                title="Verschilt per model"
+                                className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-amber-400"
+                              />
+                            )}
                             {hasOverride && (
                               <span
                                 title="Model-specifieke waarde"
