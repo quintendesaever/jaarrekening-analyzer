@@ -17,6 +17,7 @@ export function cellsForModel(
 }
 
 export function rowHasModelOverride(row: TableRow, model: ModelKind): boolean {
+  if (row.kind === "divider") return false;
   return row.cells_by_model?.[model] !== undefined;
 }
 

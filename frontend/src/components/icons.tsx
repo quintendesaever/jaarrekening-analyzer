@@ -134,6 +134,15 @@ export function MinusIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function DividerIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M4 8h16" />
+      <path d="M4 16h16" />
+    </Icon>
+  );
+}
+
 export function ArrowUpIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <Icon {...props}>

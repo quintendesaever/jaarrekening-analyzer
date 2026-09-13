@@ -61,8 +61,22 @@ def load_active_tables() -> list[dict]:
     return parse_tables_yaml(_store.load_text())
 
 
+def _compact_row(row: dict) -> dict:
+    """Keep YAML free of the default data-row kind."""
+    if row.get("kind") != "row":
+        return row
+    return {key: value for key, value in row.items() if key != "kind"}
+
+
 def dump_tables(tables: list[dict]) -> str:
-    return yaml.safe_dump({"tables": tables}, allow_unicode=True, sort_keys=False)
+    compacted = [
+        {
+            **table,
+            "rows": [_compact_row(row) for row in table.get("rows", [])],
+        }
+        for table in tables
+    ]
+    return yaml.safe_dump({"tables": compacted}, allow_unicode=True, sort_keys=False)
 
 
 def persist_tables(

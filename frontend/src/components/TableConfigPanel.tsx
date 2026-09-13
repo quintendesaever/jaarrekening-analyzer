@@ -25,11 +25,12 @@ import {
 import { tableHasModelOverrides } from "../tables/rowCells";
 import {
   addTableColumn,
+  addTableDivider,
   addTableRow,
   EditableFinancialTable,
 } from "./EditableFinancialTable";
 import { CellRefBadge } from "./CellRefInput";
-import { PlusIcon, ResetIcon, SaveIcon } from "./icons";
+import { DividerIcon, PlusIcon, ResetIcon, SaveIcon } from "./icons";
 import { ConfigPanelHeader } from "./ConfigPanelHeader";
 import { SubTabs } from "./SubTabs";
 
@@ -188,6 +189,11 @@ function TableConfigHelp() {
               de rijnaam
             </li>
             <li>← → — inspringing van de rij</li>
+            <li>
+              <span className="font-medium text-slate-700">Scheiding</span>{" "}
+              voegt een visuele lijn tussen rijen toe. Op een rij: knop met
+              twee strepen plaatst de lijn eronder.
+            </li>
           </ul>
           <p className="mt-3 font-medium text-slate-700">Badges</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -634,6 +640,15 @@ export function TableConfigPanel({ onDirtyChange }: TableConfigPanelProps) {
                 >
                   <PlusIcon />
                   Rij
+                </button>
+                <button
+                  type="button"
+                  disabled={saving || loading}
+                  onClick={() => updateActiveTable(addTableDivider(activeTable))}
+                  className="inline-flex h-8 items-center gap-1 rounded-lg bg-white px-2.5 text-sm font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <DividerIcon />
+                  Scheiding
                 </button>
                 <button
                   type="button"
