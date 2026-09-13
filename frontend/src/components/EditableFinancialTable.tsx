@@ -20,6 +20,7 @@ import type {
 } from "../types";
 import {
   DeleteIcon,
+  DividerIcon,
   IndentDecreaseIcon,
   IndentIncreaseIcon,
 } from "./icons";
@@ -125,38 +126,62 @@ function cellHasDivergentOverrides(
   });
 }
 
-export function addTableRow(table: FinancialTableConfig): FinancialTableConfig {
-  return {
-    ...table,
-    rows: [
-      ...table.rows,
-      {
-        id: newId("row"),
-        label: "",
-        cells: table.columns.map(() => ""),
-        indent: 0,
-        info: "",
-      },
-    ],
+export function addTableRow(
+  table: FinancialTableConfig,
+  afterIndex?: number,
+): FinancialTableConfig {
+  const row: TableRow = {
+    id: newId("row"),
+    label: "",
+    cells: table.columns.map(() => ""),
+    indent: 0,
+    info: "",
   };
+  const rows = [...table.rows];
+  const insertAt =
+    afterIndex === undefined ? rows.length : Math.min(rows.length, afterIndex + 1);
+  rows.splice(insertAt, 0, row);
+  return { ...table, rows };
+}
+
+export function addTableDivider(
+  table: FinancialTableConfig,
+  afterIndex?: number,
+): FinancialTableConfig {
+  const row: TableRow = {
+    id: newId("div"),
+    label: "",
+    cells: table.columns.map(() => ""),
+    kind: "divider",
+  };
+  const rows = [...table.rows];
+  const insertAt =
+    afterIndex === undefined ? rows.length : Math.min(rows.length, afterIndex + 1);
+  rows.splice(insertAt, 0, row);
+  return { ...table, rows };
 }
 
 export function addTableColumn(table: FinancialTableConfig): FinancialTableConfig {
   return {
     ...table,
     columns: [...table.columns, { id: newId("col"), label: "Kolom" }],
-    rows: table.rows.map((row) => ({
-      ...row,
-      cells: [...row.cells, ""],
-      cells_by_model: row.cells_by_model
-        ? Object.fromEntries(
-            Object.entries(row.cells_by_model).map(([kind, cells]) => [
-              kind,
-              [...cells, ""],
-            ]),
-          )
-        : undefined,
-    })),
+    rows: table.rows.map((row) => {
+      if (row.kind === "divider") {
+        return { ...row, cells: [...row.cells, ""] };
+      }
+      return {
+        ...row,
+        cells: [...row.cells, ""],
+        cells_by_model: row.cells_by_model
+          ? Object.fromEntries(
+              Object.entries(row.cells_by_model).map(([kind, cells]) => [
+                kind,
+                [...cells, ""],
+              ]),
+            )
+          : undefined,
+      };
+    }),
   };
 }
 
@@ -323,6 +348,42 @@ export function EditableFinancialTable({
           </thead>
           <tbody>
             {table.rows.map((row, rowIndex) => {
+              if (row.kind === "divider") {
+                const colSpan = table.columns.length + 1 + (editable ? 1 : 0);
+                return (
+                  <tr key={row.id} className="group">
+                    <td
+                      colSpan={colSpan}
+                      className={
+                        editable
+                          ? "border-b border-slate-200 bg-white px-2 py-1.5 group-hover:bg-slate-50"
+                          : "border-b border-slate-200 bg-white px-3 py-2"
+                      }
+                    >
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-px min-w-0 flex-1 bg-slate-300"
+                          role="separator"
+                          aria-label="Rijscheiding"
+                        />
+                        {editable && (
+                          <button
+                            type="button"
+                            disabled={disabled || table.rows.length <= 1}
+                            onClick={() => removeRow(rowIndex)}
+                            title="Scheiding verwijderen"
+                            aria-label="Scheiding verwijderen"
+                            className="rounded p-1 text-slate-400 hover:text-red-600 disabled:opacity-30"
+                          >
+                            <DeleteIcon />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }
+
               const indent = rowIndent(row);
               const info = rowInfo(row);
               const indentClass = INDENT_CLASS[indent] ?? INDENT_CLASS[MAX_INDENT];
@@ -468,16 +529,28 @@ export function EditableFinancialTable({
                   })}
                   {editable && (
                     <td className="border-b border-l border-slate-100 bg-white px-1 py-0.5 text-center group-hover:bg-slate-50">
-                      <button
-                        type="button"
-                        disabled={disabled || table.rows.length <= 1}
-                        onClick={() => removeRow(rowIndex)}
-                        title="Rij verwijderen"
-                        aria-label={`Rij ${row.label || rowIndex + 1} verwijderen`}
-                        className="rounded p-1 text-slate-400 hover:text-red-600 disabled:opacity-30"
-                      >
-                        <DeleteIcon />
-                      </button>
+                      <div className="flex items-center justify-center gap-0.5">
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => patch(addTableDivider(table, rowIndex))}
+                          title="Scheiding eronder"
+                          aria-label={`Scheiding invoegen onder ${row.label || `rij ${rowIndex + 1}`}`}
+                          className="rounded p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+                        >
+                          <DividerIcon />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={disabled || table.rows.length <= 1}
+                          onClick={() => removeRow(rowIndex)}
+                          title="Rij verwijderen"
+                          aria-label={`Rij ${row.label || rowIndex + 1} verwijderen`}
+                          className="rounded p-1 text-slate-400 hover:text-red-600 disabled:opacity-30"
+                        >
+                          <DeleteIcon />
+                        </button>
+                      </div>
                     </td>
                   )}
                 </tr>

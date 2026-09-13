@@ -31,7 +31,8 @@ EXPECTED: dict[str, tuple[str, tuple[str, ...]]] = {
 
 TABLE_KEYS = frozenset({"id", "type", "model_scope", "columns", "rows"})
 COLUMN_KEYS = frozenset({"id", "label"})
-ROW_KEYS = frozenset({"id", "label", "cells", "indent", "info", "cells_by_model"})
+ROW_KEYS = frozenset({"id", "label", "cells", "indent", "info", "cells_by_model", "kind"})
+ROW_KINDS = ("row", "divider")
 MAX_ROW_INDENT = 6
 
 
@@ -151,8 +152,30 @@ def _validate_row(
         raise ValueError(f"Tabel '{table_id}': rij moet een object zijn.")
     _unknown_keys(raw, ROW_KEYS, what=f"Tabel '{table_id}': rij")
     row_id = _require_id(raw.get("id"), what=f"Tabel '{table_id}': rij")
+    kind_raw = raw.get("kind")
+    if kind_raw is None or kind_raw == "":
+        kind = "row"
+    else:
+        kind = _as_str(kind_raw, field="kind").strip()
+        if kind not in ROW_KINDS:
+            raise ValueError(
+                f"Tabel '{table_id}', rij '{row_id}': onbekend rijtype '{kind}'."
+            )
+    if kind == "divider":
+        cells = [""] * column_count
+        row = {
+            "id": row_id,
+            "label": "",
+            "cells": cells,
+            "indent": 0,
+            "info": "",
+            "cells_by_model": {},
+            "kind": "divider",
+        }
+        return row
+
     cells = _validate_cells_list(
-        raw.get("cells", []),
+        raw.get("cells") if raw.get("cells") is not None else [],
         table_id=table_id,
         row_id=row_id,
         column_count=column_count,
@@ -162,7 +185,9 @@ def _validate_row(
         "id": row_id,
         "label": _as_str(raw.get("label"), field="label"),
         "cells": cells,
-        "indent": _validate_indent(raw.get("indent"), table_id=table_id, row_id=row_id),
+        "indent": _validate_indent(
+            raw.get("indent"), table_id=table_id, row_id=row_id
+        ),
         "info": _as_str(raw.get("info"), field="info"),
         "cells_by_model": _validate_cells_by_model(
             raw.get("cells_by_model"),

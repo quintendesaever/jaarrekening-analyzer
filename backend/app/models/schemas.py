@@ -72,6 +72,7 @@ class TableRow(BaseModel):
     indent: int = 0
     info: str = ""
     cells_by_model: dict[str, list[str]] = Field(default_factory=dict)
+    kind: Literal["row", "divider"] = "row"
 
 
 class FinancialTableConfig(BaseModel):

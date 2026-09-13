@@ -47,6 +47,8 @@ export interface TableColumn {
   label: string;
 }
 
+export type TableRowKind = "row" | "divider";
+
 export interface TableRow {
   id: string;
   label: string;
@@ -57,6 +59,8 @@ export interface TableRow {
   info?: string;
   /** Per-model cell overrides when formulas differ between Full / Verkort / Micro. */
   cells_by_model?: Partial<Record<ModelKind, string[]>>;
+  /** `divider` renders a horizontal rule instead of data cells. */
+  kind?: TableRowKind;
 }
 
 export interface FinancialTableConfig {

@@ -365,6 +365,29 @@ def test_validate_accepts_row_indent_and_info() -> None:
     assert row["info"] == "Toelichting"
 
 
+def test_validate_accepts_divider_row() -> None:
+    bundled = yaml.safe_load(BUNDLED_TABLES_PATH.read_text(encoding="utf-8"))
+    table = bundled["tables"][0]
+    table["rows"].insert(
+        1,
+        {"id": "cf-divider-1", "kind": "divider"},
+    )
+    validated = validate_tables_config(bundled["tables"])
+    divider = validated[0]["rows"][1]
+    assert divider["kind"] == "divider"
+    assert divider["label"] == ""
+    assert len(divider["cells"]) == len(validated[0]["columns"])
+    assert divider["cells_by_model"] == {}
+    assert "kind" not in validated[0]["rows"][0]
+
+
+def test_validate_rejects_unknown_row_kind() -> None:
+    bundled = yaml.safe_load(BUNDLED_TABLES_PATH.read_text(encoding="utf-8"))
+    bundled["tables"][0]["rows"][0]["kind"] = "spacer"
+    with pytest.raises(ValueError, match="onbekend rijtype"):
+        validate_tables_config(bundled["tables"])
+
+
 def test_validate_accepts_cells_by_model() -> None:
     bundled = yaml.safe_load(BUNDLED_TABLES_PATH.read_text(encoding="utf-8"))
     table = bundled["tables"][0]
