@@ -28,9 +28,165 @@ import {
   addTableRow,
   EditableFinancialTable,
 } from "./EditableFinancialTable";
+import { CellRefBadge } from "./CellRefInput";
 import { PlusIcon, ResetIcon, SaveIcon } from "./icons";
 import { ConfigPanelHeader } from "./ConfigPanelHeader";
 import { SubTabs } from "./SubTabs";
+
+function HelpCode({ children }: { children: string }) {
+  return <code className="rounded bg-slate-100 px-1 font-mono">{children}</code>;
+}
+
+function TableConfigHelp() {
+  return (
+    <div className="space-y-4 text-xs leading-relaxed">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <p className="font-medium text-slate-700">Tabellen en modellen</p>
+          <ul className="mt-1.5 space-y-1">
+            <li>
+              Kies eerst de tabel (Cashflow, Herwerkte balans of Herwerkte
+              resultatenrekening).
+            </li>
+            <li>
+              Bij de resultatenrekening kies je{" "}
+              <span className="font-medium text-slate-700">Volledig</span> of{" "}
+              <span className="font-medium text-slate-700">Verkort + Micro</span>{" "}
+              — die twee groepen hebben een andere tabelstructuur.
+            </li>
+            <li>
+              <span className="font-medium text-slate-700">Alle</span> bewerkt
+              de gedeelde celformules. Eén model bewerkt alleen de
+              model-specifieke override.
+            </li>
+            <li>
+              Rijlabels, volgorde, inspringing, toelichting, rijen en kolommen
+              blijven gedeeld voor alle modellen in de tabel.
+            </li>
+            <li>Opslaan schrijft alle vier tabellen als één versie.</li>
+          </ul>
+        </div>
+        <div>
+          <p className="font-medium text-slate-700">MAR-jaar</p>
+          <ul className="mt-1.5 space-y-1">
+            <li>
+              <HelpCode>mar:29/58</HelpCode> neemt automatisch het jaar uit de
+              kolomnaam: een kolom “vorig” gebruikt het vorige boekjaar,
+              anders het huidige.
+            </li>
+            <li>
+              Forceer het jaar met <HelpCode>mar.vorig:70</HelpCode> of{" "}
+              <HelpCode>mar.boekjaar:70</HelpCode>.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="grid gap-4 border-t border-slate-100 pt-3 sm:grid-cols-2">
+        <div>
+          <p className="font-medium text-slate-700">Directe verwijzingen</p>
+          <ul className="mt-1.5 space-y-1">
+            <li>
+              <HelpCode>ratio:current_ratio</HelpCode> — berekende ratio
+            </li>
+            <li>
+              <HelpCode>cell:boekjaar</HelpCode> — waarde van een andere kolom
+              in dezelfde rij
+            </li>
+            <li>
+              <HelpCode>pct:vorig,boekjaar</HelpCode> — procentueel verschil
+            </li>
+            <li>Typ een prefix voor suggesties.</li>
+          </ul>
+        </div>
+        <div>
+          <p className="font-medium text-slate-700">Berekeningen</p>
+          <ul className="mt-1.5 space-y-1">
+            <li>
+              Begin met <HelpCode>=</HelpCode>. Operatoren:{" "}
+              <HelpCode>+</HelpCode> <HelpCode>-</HelpCode>{" "}
+              <HelpCode>*</HelpCode> <HelpCode>/</HelpCode>.
+            </li>
+            <li>
+              <HelpCode>*</HelpCode> en <HelpCode>/</HelpCode> gaan voor{" "}
+              <HelpCode>+</HelpCode> en <HelpCode>-</HelpCode>. Haakjes en
+              unaire <HelpCode>+</HelpCode>/<HelpCode>-</HelpCode> mogen.
+            </li>
+            <li>
+              <HelpCode>=mar:29/58 / 2</HelpCode>
+            </li>
+            <li>
+              <HelpCode>=mar:70 - mar:60/66A</HelpCode>
+            </li>
+            <li>
+              <HelpCode>=ratio:current_ratio * 100</HelpCode>
+            </li>
+            <li>
+              <HelpCode>=(mar.boekjaar:70 - mar.vorig:70) / mar.vorig:70 * 100</HelpCode>
+            </li>
+            <li>
+              <HelpCode>=-100 + mar:70</HelpCode>
+            </li>
+            <li>
+              Een mislukte berekening toont <HelpCode>—</HelpCode>. Hover
+              toont de fout.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="grid gap-4 border-t border-slate-100 pt-3 sm:grid-cols-2">
+        <div>
+          <p className="font-medium text-slate-700">Kleurindicatoren</p>
+          <ul className="mt-1.5 space-y-1">
+            <li>
+              <span
+                className="mb-0.5 mr-1 inline-block h-1.5 w-1.5 rounded-full bg-amber-400"
+                aria-hidden
+              />
+              Oranje stip rechtsboven in een cel bij <span className="font-medium">Alle</span>:
+              de waarde verschilt per model.
+            </li>
+            <li>
+              <span
+                className="mb-0.5 mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500"
+                aria-hidden
+              />
+              Groene stip rechtsboven bij één model: die cel heeft een
+              model-specifieke waarde.
+            </li>
+            <li>
+              <span
+                className="mb-0.5 mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500"
+                aria-hidden
+              />
+              Groene stip op een modelknop: dat model heeft ergens
+              model-specifieke formules.
+            </li>
+          </ul>
+        </div>
+        <div>
+          <p className="font-medium text-slate-700">Rijbesturing</p>
+          <ul className="mt-1.5 space-y-1">
+            <li>
+              <span className="font-semibold">i</span> — toelichting rechts van
+              de rijnaam
+            </li>
+            <li>← → — inspringing van de rij</li>
+          </ul>
+          <p className="mt-3 font-medium text-slate-700">Badges</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <CellRefBadge kind="mar" />
+            <CellRefBadge kind="ratio" />
+            <CellRefBadge kind="cell" />
+            <CellRefBadge kind="pct" />
+            <CellRefBadge kind="calc" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const ADMIN_TOKEN_KEY = "ratioConfigAdminToken";
 
@@ -294,43 +450,7 @@ export function TableConfigPanel({ onDirtyChange }: TableConfigPanelProps) {
         onAdminTokenChange={handleTokenChange}
         helpContent={
           <>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <p className="font-medium text-slate-700">Celverwijzingen</p>
-                <ul className="mt-1.5 space-y-1 text-xs leading-relaxed">
-                  <li>
-                    <code className="rounded bg-slate-100 px-1 font-mono">mar:29/58</code>{" "}
-                    — bedrag uit PDF
-                  </li>
-                  <li>
-                    <code className="rounded bg-slate-100 px-1 font-mono">ratio:id</code>{" "}
-                    — berekende ratio
-                  </li>
-                  <li>
-                    <code className="rounded bg-slate-100 px-1 font-mono">cell:boekjaar</code>{" "}
-                    — andere kolom
-                  </li>
-                  <li>
-                    <code className="rounded bg-slate-100 px-1 font-mono">pct:vorig,boekjaar</code>{" "}
-                    — % verschil
-                  </li>
-                  <li>Typ een prefix voor suggesties.</li>
-                </ul>
-              </div>
-              <div>
-                <p className="font-medium text-slate-700">Rij &amp; model</p>
-                <ul className="mt-1.5 space-y-1 text-xs leading-relaxed">
-                  <li>
-                    <span className="font-semibold">i</span> — toelichting rechts van de rijnaam
-                  </li>
-                  <li>← → — inspringing</li>
-                  <li>
-                    Selecteer één of meerdere modellen om tegelijk te bewerken
-                  </li>
-                  <li>Opslaan schrijft alle vier tabellen als één versie.</li>
-                </ul>
-              </div>
-            </div>
+            <TableConfigHelp />
             <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2">
               <label className="block text-xs font-medium text-slate-600">
                 Admin-wachtwoord

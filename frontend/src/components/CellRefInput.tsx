@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { cellRefKind } from "../tables/cellRefs";
 import {
+  applyCellRefSuggestion,
   getCellRefSuggestions,
   type CellRefSuggestion,
 } from "../tables/cellRefSuggestions";
@@ -19,19 +20,38 @@ interface CellRefInputProps {
   ariaLabel?: string;
 }
 
-function CellRefBadge({ kind }: { kind: ReturnType<typeof cellRefKind> }) {
+const BADGE_STYLES: Record<string, string> = {
+  mar: "bg-violet-50 text-violet-800 ring-violet-200",
+  ratio: "bg-sky-50 text-sky-800 ring-sky-200",
+  cell: "bg-amber-50 text-amber-900 ring-amber-200",
+  pct: "bg-emerald-50 text-emerald-900 ring-emerald-200",
+  calc: "bg-indigo-50 text-indigo-800 ring-indigo-200",
+};
+
+const BADGE_LABELS: Record<string, string> = {
+  mar: "mar",
+  ratio: "ratio",
+  cell: "cell",
+  pct: "pct",
+  calc: "fx",
+};
+
+const BADGE_ARIA: Record<string, string> = {
+  mar: "MAR-verwijzing",
+  ratio: "Ratio-verwijzing",
+  cell: "Celverwijzing",
+  pct: "Percentageverwijzing",
+  calc: "Berekening",
+};
+
+export function CellRefBadge({ kind }: { kind: ReturnType<typeof cellRefKind> }) {
   if (!kind) return null;
-  const styles: Record<string, string> = {
-    mar: "bg-violet-50 text-violet-700 ring-violet-200",
-    ratio: "bg-sky-50 text-sky-700 ring-sky-200",
-    cell: "bg-amber-50 text-amber-800 ring-amber-200",
-    pct: "bg-emerald-50 text-emerald-800 ring-emerald-200",
-  };
   return (
     <span
-      className={`shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${styles[kind]}`}
+      className={`shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${BADGE_STYLES[kind]}`}
+      aria-label={BADGE_ARIA[kind]}
     >
-      {kind}
+      {BADGE_LABELS[kind]}
     </span>
   );
 }
@@ -77,7 +97,7 @@ export function CellRefInput({
   }
 
   function pick(suggestion: CellRefSuggestion) {
-    onChange(suggestion.insert);
+    onChange(applyCellRefSuggestion(value, suggestion));
     setOpen(false);
   }
 
@@ -132,7 +152,7 @@ export function CellRefInput({
           className="absolute left-0 top-full z-50 mt-1 max-h-56 w-72 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
         >
           {suggestions.map((item, index) => (
-            <li key={`${item.kind}-${item.insert}`} role="option" aria-selected={index === activeIndex}>
+            <li key={`${item.kind}-${item.insert}-${item.replaceStart}`} role="option" aria-selected={index === activeIndex}>
               <button
                 type="button"
                 className={`flex w-full flex-col items-start gap-0.5 px-2.5 py-1.5 text-left text-sm ${

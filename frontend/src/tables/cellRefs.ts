@@ -6,12 +6,23 @@ import type {
   TableColumn,
   TableRow,
 } from "../types";
-import { formatAmount, formatRatio, formatSignedPercent } from "../utils/format";
+import {
+  formatAmount,
+  formatCalcResult,
+  formatRatio,
+  formatSignedPercent,
+} from "../utils/format";
+import {
+  evaluateCellFormula,
+  parseCellFormula,
+  type FormulaResolveEnv,
+} from "./cellFormula";
 
 export type CellYear = "current" | "previous";
 
 export type ParsedCellRef =
   | { kind: "literal"; text: string }
+  | { kind: "calc"; source: string }
   | { kind: "mar"; expr: string; year: CellYear | "auto" }
   | { kind: "ratio"; id: string }
   | { kind: "cell"; columnRef: string }
@@ -136,6 +147,10 @@ export function parseCellRef(raw: string): ParsedCellRef {
   const text = raw.trim();
   if (!text) return { kind: "literal", text: "" };
 
+  if (text.startsWith("=")) {
+    return { kind: "calc", source: text };
+  }
+
   const pctMatch = /^pct:([^,]+),([^,]+)$/i.exec(text);
   if (pctMatch) {
     return {
@@ -192,7 +207,7 @@ export function isCellRef(raw: string): boolean {
 
 export function cellRefKind(
   raw: string,
-): "mar" | "ratio" | "cell" | "pct" | null {
+): "mar" | "ratio" | "cell" | "pct" | "calc" | null {
   const parsed = parseCellRef(raw);
   if (parsed.kind === "literal") return null;
   return parsed.kind;
@@ -251,6 +266,65 @@ function resolveColumnRef(
   );
 }
 
+function formulaEnv(context: CellResolveContext): FormulaResolveEnv {
+  return {
+    resolveMar(expr, year) {
+      if (!context.result) {
+        return {
+          ok: false,
+          error: "Analyseer eerst een PDF om deze verwijzing te berekenen.",
+        };
+      }
+      const resolvedYear =
+        year === "auto" ? defaultYearForColumn(context.column) : year;
+      const maps = buildAmountMaps(allStatementLines(context.result));
+      const { value, missing } = evaluateMarExpr(expr, maps, resolvedYear);
+      if (value === null) {
+        return {
+          ok: false,
+          error: missing.length
+            ? `Ontbrekende MAR-code(s): ${missing.join(", ")}`
+            : `Geen bedrag voor ${expr}`,
+        };
+      }
+      return { ok: true, value };
+    },
+    resolveRatio(id) {
+      if (!context.result) {
+        return {
+          ok: false,
+          error: "Analyseer eerst een PDF om deze verwijzing te berekenen.",
+        };
+      }
+      const ratio = findRatio(context.result.ratios, id);
+      if (!ratio) {
+        return { ok: false, error: `Onbekende ratio-id: ${id}` };
+      }
+      if (ratio.value === null) {
+        return {
+          ok: false,
+          error: ratio.missing_codes.length
+            ? `Ratio ${ratio.id}: ontbrekende codes ${ratio.missing_codes.join(", ")}`
+            : `Ratio ${ratio.id}: geen waarde`,
+        };
+      }
+      return { ok: true, value: ratio.value };
+    },
+  };
+}
+
+function resolveFormula(raw: string, context: CellResolveContext): NumericResult {
+  const parsed = parseCellFormula(raw);
+  if (!parsed.ok) {
+    return { value: null, missing: true, title: parsed.error };
+  }
+  const evaluated = evaluateCellFormula(parsed.ast, formulaEnv(context));
+  if (!evaluated.ok) {
+    return { value: null, missing: true, title: evaluated.error };
+  }
+  return { value: evaluated.value, missing: false, title: raw.trim() };
+}
+
 function resolveCellNumeric(
   raw: string,
   context: CellResolveContext,
@@ -262,6 +336,10 @@ function resolveCellNumeric(
   }
 
   const parsed = parseCellRef(raw);
+
+  if (parsed.kind === "calc") {
+    return resolveFormula(raw, context);
+  }
 
   if (parsed.kind === "literal") {
     const num = Number(raw.trim().replace(/\s/g, "").replace(",", "."));
@@ -365,6 +443,24 @@ export function resolveCellValue(
 
   if (parsed.kind === "literal") {
     return { text: raw, isRef: false, missing: false };
+  }
+
+  if (parsed.kind === "calc") {
+    const numeric = resolveFormula(raw, context);
+    if (numeric.value === null) {
+      return {
+        text: "—",
+        title: numeric.title,
+        isRef: true,
+        missing: true,
+      };
+    }
+    return {
+      text: formatCalcResult(numeric.value, amountFormat),
+      title: numeric.title,
+      isRef: true,
+      missing: false,
+    };
   }
 
   if (!context.result) {

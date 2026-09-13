@@ -105,7 +105,7 @@ function cellPlaceholder(column: TableColumn, index: number): string {
     key.includes("amount") ||
     index > 0
   ) {
-    return "mar:29/58 of cell:boekjaar";
+    return "mar:29/58, =… of cell:boekjaar";
   }
   return "";
 }
