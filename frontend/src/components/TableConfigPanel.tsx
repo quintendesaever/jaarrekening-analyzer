@@ -17,10 +17,13 @@ import type {
   TablesConfigMeta,
 } from "../types";
 import {
-  MODEL_LABELS,
+  defaultSelectedModels,
+  formatModelList,
+  MODEL_ORDER,
+  resultGroupForModels,
   tableIdForView,
+  toggleModelSelection,
   VIEW_ITEMS,
-  type ResultGroup,
 } from "../tables/views";
 import { tableHasModelOverrides } from "../tables/rowCells";
 import {
@@ -28,6 +31,7 @@ import {
   addTableRow,
   EditableFinancialTable,
 } from "./EditableFinancialTable";
+import { ModelMultiSelect } from "./ModelMultiSelect";
 import { PlusIcon, ResetIcon, SaveIcon } from "./icons";
 import { ConfigPanelHeader } from "./ConfigPanelHeader";
 import { SubTabs } from "./SubTabs";
@@ -110,14 +114,14 @@ export function TableConfigPanel({ onDirtyChange }: TableConfigPanelProps) {
   > | null>(null);
   const [history, setHistory] = useState<TableHistoryEntry[]>([]);
   const [view, setView] = useState<TabellenViewId>("cashflow");
-  const [resultGroup, setResultGroup] = useState<ResultGroup>("full");
+  const [selectedModels, setSelectedModels] = useState<ModelKind[]>(
+    defaultSelectedModels(),
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [ratioSpecs, setRatioSpecs] = useState<RatioSpec[]>([]);
-  // null = "all models" mode (edits shared row.cells); a specific kind = override mode
-  const [editModel, setEditModel] = useState<ModelKind | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
 
   const dirty = useMemo(
@@ -125,13 +129,13 @@ export function TableConfigPanel({ onDirtyChange }: TableConfigPanelProps) {
     [draft, saved],
   );
 
+  const resultGroup = resultGroupForModels(selectedModels);
   const activeTableId = tableIdForView(view, resultGroup);
   const activeTable = draft.find((table) => table.id === activeTableId) ?? null;
 
   useEffect(() => {
-    // Reset to all-mode when switching tables
-    setEditModel(null);
-  }, [activeTable?.id]);
+    setSelectedModels(defaultSelectedModels());
+  }, [view]);
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -325,7 +329,12 @@ export function TableConfigPanel({ onDirtyChange }: TableConfigPanelProps) {
                   </li>
                   <li>← → — inspringing</li>
                   <li>
-                    Selecteer één of meerdere modellen om tegelijk te bewerken
+                    Kies expliciet welke modellen een celformule wijzigt.
+                    Multi-select schrijft nooit automatisch naar gedeelde cellen.
+                  </li>
+                  <li>
+                    Rijlabels, volgorde, inspringing, toelichting, rijen en
+                    kolommen blijven gedeeld.
                   </li>
                   <li>Opslaan schrijft alle vier tabellen als één versie.</li>
                 </ul>
@@ -395,108 +404,69 @@ export function TableConfigPanel({ onDirtyChange }: TableConfigPanelProps) {
         <div className="space-y-3 border-b border-slate-100 p-3">
           <SubTabs items={VIEW_ITEMS} value={view} onChange={setView} />
 
-          {view === "herwerkte_resultatenrekening" && (
-            <div
-              role="group"
-              aria-label="Resultatenrekening variant"
-              className="inline-flex overflow-hidden rounded-lg ring-1 ring-slate-200"
-            >
-              <button
-                type="button"
-                onClick={() => setResultGroup("full")}
-                className={`px-3 py-1.5 text-sm font-medium ${
-                  resultGroup === "full"
-                    ? "bg-slate-800 text-white"
-                    : "bg-white text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {MODEL_LABELS.full}
-              </button>
-              <button
-                type="button"
-                onClick={() => setResultGroup("verkort_micro")}
-                className={`px-3 py-1.5 text-sm font-medium ${
-                  resultGroup === "verkort_micro"
-                    ? "bg-slate-800 text-white"
-                    : "bg-white text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                Verkort + Micro
-              </button>
-            </div>
-          )}
-
           {activeTable && (
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              {activeTable.model_scope.length > 1 && (
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                    Bewerk
-                  </span>
-                  <div role="group" aria-label="Model bewerken" className="inline-flex flex-wrap gap-1">
-                    {/* "Alle" = null / all-mode */}
-                    <button
-                      type="button"
-                      aria-pressed={editModel === null}
-                      onClick={() => setEditModel(null)}
-                      className={`inline-flex items-center rounded-md px-2.5 py-1 text-sm font-medium ring-1 ${
-                        editModel === null
-                          ? "bg-slate-800 text-white ring-slate-800"
-                          : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"
-                      }`}
-                    >
-                      Alle
-                    </button>
-                    {activeTable.model_scope.map((kind) => {
-                      const hasOverrides = tableHasModelOverrides(activeTable.rows, kind);
-                      return (
-                        <button
-                          key={kind}
-                          type="button"
-                          aria-pressed={editModel === kind}
-                          onClick={() =>
-                            setEditModel((prev) => (prev === kind ? null : kind))
-                          }
-                          className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-sm font-medium ring-1 ${
-                            editModel === kind
-                              ? "bg-slate-800 text-white ring-slate-800"
-                              : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"
-                          }`}
-                        >
-                          {MODEL_LABELS[kind]}
-                          {hasOverrides && (
-                            <span
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                editModel === kind ? "bg-emerald-300" : "bg-emerald-500"
-                              }`}
-                              title="Heeft model-specifieke waarden"
-                            />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <ModelMultiSelect
+                  models={MODEL_ORDER}
+                  selected={selectedModels}
+                  onChange={setSelectedModels}
+                  ariaLabel="Modellen bewerken"
+                  resolveToggle={(current, clicked) =>
+                    toggleModelSelection(view, current, clicked)
+                  }
+                  hasOverrides={(kind) => {
+                    if (activeTable.model_scope.includes(kind)) {
+                      return tableHasModelOverrides(activeTable.rows, kind);
+                    }
+                    const siblingId = tableIdForView(
+                      "herwerkte_resultatenrekening",
+                      kind === "full" ? "full" : "verkort_micro",
+                    );
+                    const sibling = draft.find((table) => table.id === siblingId);
+                    return sibling
+                      ? tableHasModelOverrides(sibling.rows, kind)
+                      : false;
+                  }}
+                />
+                <div className="flex shrink-0 gap-1.5">
+                  <button
+                    type="button"
+                    disabled={saving || loading}
+                    onClick={() => updateActiveTable(addTableRow(activeTable))}
+                    className="inline-flex h-8 items-center gap-1 rounded-lg bg-white px-2.5 text-sm font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <PlusIcon />
+                    Rij
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving || loading}
+                    onClick={() => updateActiveTable(addTableColumn(activeTable))}
+                    className="inline-flex h-8 items-center gap-1 rounded-lg bg-white px-2.5 text-sm font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <PlusIcon />
+                    Kolom
+                  </button>
                 </div>
-              )}
-              <div className="flex shrink-0 gap-1.5">
-                <button
-                  type="button"
-                  disabled={saving || loading}
-                  onClick={() => updateActiveTable(addTableRow(activeTable))}
-                  className="inline-flex h-8 items-center gap-1 rounded-lg bg-white px-2.5 text-sm font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  <PlusIcon />
-                  Rij
-                </button>
-                <button
-                  type="button"
-                  disabled={saving || loading}
-                  onClick={() => updateActiveTable(addTableColumn(activeTable))}
-                  className="inline-flex h-8 items-center gap-1 rounded-lg bg-white px-2.5 text-sm font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  <PlusIcon />
-                  Kolom
-                </button>
+              </div>
+              <div className="min-w-0 text-xs leading-relaxed text-slate-500">
+                <p>
+                  <span className="font-medium text-slate-600">
+                    Actieve bewerking:{" "}
+                  </span>
+                  {formatModelList(selectedModels)}
+                  {view === "herwerkte_resultatenrekening"
+                    ? selectedModels.includes("full")
+                      ? " — Volledig heeft een eigen tabelstructuur."
+                      : " — Verkort en Micro delen deze tabelstructuur."
+                    : "."}
+                </p>
+                <p>
+                  Celformules gelden alleen voor de geselecteerde modellen.
+                  Rijlabels, volgorde, inspringing, toelichting, rijen en
+                  kolommen blijven gedeeld.
+                </p>
               </div>
             </div>
           )}
@@ -509,7 +479,9 @@ export function TableConfigPanel({ onDirtyChange }: TableConfigPanelProps) {
             disabled={saving || loading}
             editable={true}
             ratioSpecs={ratioSpecs}
-            activeModel={editModel}
+            activeModels={selectedModels.filter((kind) =>
+              activeTable.model_scope.includes(kind),
+            )}
           />
         )}
 

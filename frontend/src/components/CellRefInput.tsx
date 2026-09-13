@@ -17,6 +17,7 @@ interface CellRefInputProps {
   placeholder?: string;
   className?: string;
   ariaLabel?: string;
+  mixed?: boolean;
 }
 
 function CellRefBadge({ kind }: { kind: ReturnType<typeof cellRefKind> }) {
@@ -45,20 +46,22 @@ export function CellRefInput({
   placeholder,
   className,
   ariaLabel,
+  mixed = false,
 }: CellRefInputProps) {
   const listId = useId();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const refKind = cellRefKind(value);
+  const displayValue = mixed ? "" : value;
+  const refKind = mixed ? null : cellRefKind(value);
   const suggestions = open
-    ? getCellRefSuggestions(value, columns, ratioSpecs)
+    ? getCellRefSuggestions(displayValue, columns, ratioSpecs)
     : [];
 
   useEffect(() => {
     setActiveIndex(0);
-  }, [value, suggestions.length]);
+  }, [displayValue, suggestions.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -83,7 +86,7 @@ export function CellRefInput({
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (!open || suggestions.length === 0) {
-      if (event.key === "ArrowDown" && getCellRefSuggestions(value, columns, ratioSpecs).length > 0) {
+      if (event.key === "ArrowDown" && getCellRefSuggestions(displayValue, columns, ratioSpecs).length > 0) {
         setOpen(true);
         event.preventDefault();
       }
@@ -106,19 +109,30 @@ export function CellRefInput({
   return (
     <div ref={rootRef} className="relative min-w-0 flex-1">
       <div className="flex items-center gap-1">
-        <CellRefBadge kind={refKind} />
+        {mixed ? (
+          <span
+            className="shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-amber-200 bg-amber-50"
+            title="Geselecteerde modellen hebben verschillende waarden"
+          >
+            Gemengd
+          </span>
+        ) : (
+          <CellRefBadge kind={refKind} />
+        )}
         <input
-          value={value}
+          value={displayValue}
           disabled={disabled}
-          placeholder={placeholder}
+          placeholder={mixed ? "Verschilt per model" : placeholder}
           onChange={(event) => {
             const next = event.target.value;
             onChange(next);
             showSuggestions(next);
           }}
-          onFocus={() => showSuggestions(value)}
+          onFocus={() => showSuggestions(displayValue)}
           onKeyDown={handleKeyDown}
-          aria-label={ariaLabel}
+          aria-label={
+            mixed ? `${ariaLabel ?? "Cel"} (gemengde waarde)` : ariaLabel
+          }
           aria-expanded={open}
           aria-controls={open ? listId : undefined}
           aria-autocomplete="list"
